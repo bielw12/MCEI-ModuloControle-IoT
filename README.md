@@ -144,18 +144,6 @@ Para visualizar o sistema funcionando:
 
 ---
 
-## Estrutura do Projeto
-
-```
-📦 tcc-iot/
-├── 📄 esp32_tcc.ino      # Firmware completo do ESP32
-├── 📄 diagram.json       # Circuito Wokwi (componentes + conexões)
-├── 📄 libraries.txt      # Lista de bibliotecas para o Wokwi
-├── 📄 dashboard.html     # Dashboard web completo
-├── 📄 resumo_projeto.md  # Resumo técnico do projeto
-└── 📄 README.md          # Este arquivo
-```
-
 ---
 
 ## Como Executar
