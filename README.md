@@ -287,4 +287,4 @@ ESP32 (subscriber)      →  assina  →  tcc/modulo1/cmd
 
 ---
 
-*Desenvolvido para TCC — Sistema de Monitoramento IoT com ESP32 simulado via Wokwi, protocolo MQTT e dashboard web.*
+*MCEI - Módulo de Controle Espacial Inteligente - Sistema de Monitoramento IoT com ESP32 simulado via Wokwi, protocolo MQTT e dashboard web.*
