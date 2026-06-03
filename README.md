@@ -1,3 +1,6 @@
+<img width="1895" height="942" alt="image" src="https://github.com/user-attachments/assets/26d8b9f0-25f7-42a1-bc4b-cac3ab10ce4a" />
+
+
 # 🌡️ Módulo de Monitoramento IoT — ESP32 + Wokwi + MQTT + Dashboard Web
 
 > Sistema de coleta, transmissão e análise de grandezas físicas em tempo real, desenvolvido como parte de trabalho acadêmico (TCC). Utiliza simulação digital de hardware via Wokwi, comunicação via protocolo MQTT e visualização em dashboard web interativo.
