@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "author": "TCC - Modulo IoT ESP32",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp32", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -80, "left": -170, "attrs": {} },
+    { "type": "wokwi-resistor", "id": "r1", "top": -40, "left": -80, "attrs": { "value": "10000" }, "rotate": 90 },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr1", "top": 80, "left": -170, "attrs": {} },
+    { "type": "wokwi-resistor", "id": "r2", "top": 100, "left": -80, "attrs": { "value": "10000" }, "rotate": 90 },
+    { "type": "wokwi-resistor", "id": "r_div1", "top": 180, "left": -170, "attrs": { "value": "10000" } },
+    { "type": "wokwi-resistor", "id": "r_div2", "top": 200, "left": -170, "attrs": { "value": "3300" } },
+    { "type": "wokwi-acs712", "id": "acs1", "top": -80, "left": 160, "attrs": { "variant": "5A" } }
+  ],
+  "connections": [
+    ["esp32:3V3", "dht1:VCC", "red", []],
+    ["esp32:GND.1", "dht1:GND", "black", []],
+    ["esp32:4", "dht1:SDA", "purple", []],
+    ["esp32:3V3", "r1:1", "red", []],
+    ["r1:2", "dht1:SDA", "purple", []],
+    ["esp32:3V3", "ldr1:VCC", "red", []],
+    ["esp32:GND.1", "r2:2", "black", []],
+    ["ldr1:AO", "r2:1", "orange", []],
+    ["ldr1:AO", "esp32:34", "orange", []],
+    ["r_div1:2", "r_div2:1", "brown", []],
+    ["r_div1:2", "esp32:35", "brown", []],
+    ["esp32:GND.1", "r_div2:2", "black", []],
+    ["esp32:VIN", "acs1:VCC", "red", []],
+    ["esp32:GND.1", "acs1:GND", "black", []],
+    ["acs1:OUT", "esp32:32", "blue", []]
+  ]
+}

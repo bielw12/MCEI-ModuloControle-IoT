@@ -1,0 +1,7 @@
+# Bibliotecas necessárias — instalar no Wokwi via "Library Manager"
+# ou adicionar no arquivo libraries.txt do projeto Wokwi
+
+DHT sensor library @ 1.4.4
+ArduinoJson @ 6.21.3
+PubSubClient @ 2.8.0
+WiFi (built-in ESP32 core)

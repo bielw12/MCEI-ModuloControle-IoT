@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TCC — Módulo IoT Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg:      #f5f4f0;
+    --surface: #ffffff;
+    --border:  rgba(0,0,0,0.10);
+    --text:    #1a1a18;
+    --muted:   #6b6a65;
+    --teal:    #1D9E75;
+    --amber:   #BA7517;
+    --purple:  #534AB7;
+    --coral:   #D85A30;
+    --blue:    #185FA5;
+    --red:     #A32D2D;
+    --green:   #3B6D11;
+    --radius:  12px;
+    --font:    -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:      #1a1a18;
+      --surface: #242422;
+      --border:  rgba(255,255,255,0.10);
+      --text:    #e8e6df;
+      --muted:   #8a8880;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+  .status-bar { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--muted); }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 20px;
+    border: 0.5px solid var(--border);
+    font-size: 12px; font-weight: 500;
+    background: var(--bg);
+  }
+  .status-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .status-indicator.online  { background: var(--teal); }
+  .status-indicator.offline { background: var(--red); }
+
+  /* ── Layout principal ── */
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+  /* ── Cards de métricas ── */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .metric-card.temp::before   { background: var(--coral); }
+  .metric-card.umid::before   { background: var(--blue); }
+  .metric-card.lux::before    { background: var(--amber); }
+  .metric-card.tensao::before { background: var(--purple); }
+  .metric-card.corr::before   { background: var(--teal); }
+
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .metric-value { font-size: 28px; font-weight: 500; line-height: 1; }
+  .metric-unit  { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+  .metric-delta { font-size: 11px; margin-top: 6px; color: var(--muted); }
+  .alert-badge  { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; background: #FCEBEB; color: var(--red); }
+
+  /* ── Gráficos ── */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .chart-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .chart-title  { font-size: 13px; font-weight: 500; }
+  .chart-badge  { font-size: 11px; color: var(--muted); background: var(--bg); padding: 3px 8px; border-radius: 6px; border: 0.5px solid var(--border); }
+  .chart-wrap   { position: relative; height: 180px; }
+
+  /* ── Painel de análise estatística ── */
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .analysis-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .analysis-title { font-size: 13px; font-weight: 500; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .analysis-icon  { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 0.5px solid var(--border); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--muted); }
+  .stat-value { font-weight: 500; font-family: monospace; font-size: 13px; }
+
+  /* ── Log de eventos ── */
+  .log-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+  .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .log-title  { font-size: 13px; font-weight: 500; }
+  .log-body   { height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+  .log-entry  { font-size: 12px; font-family: monospace; color: var(--muted); display: flex; gap: 10px; }
+  .log-time   { color: var(--teal); min-width: 80px; flex-shrink: 0; }
+  .log-entry.alert .log-msg { color: var(--red); }
+  .log-entry.ok    .log-msg { color: var(--text); }
+
+  /* ── Barra de ações ── */
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  button {
+    font-family: var(--font); font-size: 13px; cursor: pointer;
+    padding: 8px 16px; border-radius: 8px;
+    border: 0.5px solid var(--border);
+    background: var(--surface); color: var(--text);
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+  button.primary:hover { opacity: 0.9; }
+  button.danger  { background: #FCEBEB; color: var(--red); border-color: #F09595; }
+
+  /* ── Config de alertas ── */
+  .config-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 20px;
+  }
+  .config-title { font-size: 13px; font-weight: 500; margin-bottom: 14px; }
+  .config-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .config-field { display: flex; flex-direction: column; gap: 5px; }
+  .config-field label { font-size: 12px; color: var(--muted); }
+  .config-field input {
+    font-family: var(--font); font-size: 13px;
+    padding: 7px 10px; border-radius: 7px;
+    border: 0.5px solid var(--border);
+    background: var(--bg); color: var(--text);
+    outline: none;
+  }
+  .config-field input:focus { border-color: var(--teal); }
+
+  /* ── Footer ── */
+  footer { text-align: center; font-size: 12px; color: var(--muted); padding: 24px 0 32px; }
+  .no-data { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    TCC — Módulo IoT
+  </div>
+  <div class="status-bar">
+    <span id="last-update">—</span>
+    <div class="status-pill">
+      <div class="status-indicator" id="conn-indicator"></div>
+      <span id="conn-label">Desconectado</span>
+    </div>
+    <div class="status-pill">
+      <div class="status-indicator" id="esp-indicator"></div>
+      <span id="esp-label">ESP32 —</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Ações -->
+  <div class="actions">
+    <button class="primary" onclick="exportCSV()">Exportar CSV</button>
+    <button onclick="limparHistorico()">Limpar histórico</button>
+    <button onclick="enviarComando('reset')">Reset contador ESP32</button>
+    <button class="danger" onclick="desconectar()">Desconectar</button>
+  </div>
+
+  <!-- Métricas principais -->
+  <div class="metrics-grid">
+    <div class="metric-card temp">
+      <div class="metric-label">
+        Temperatura
+        <span class="alert-badge" id="alert-temp" style="display:none">ALERTA</span>
+      </div>
+      <div class="metric-value" id="v-temp">—<span class="metric-unit">°C</span></div>
+      <div class="metric-delta" id="d-temp">aguardando dados...</div>
+    </div>
+    <div class="metric-card umid">
+      <div class="metric-label">
+        Umidade
+        <span class="alert-badge" id="alert-umid" style="display:none">ALERTA</span>
+      </div>
+      <div class="metric-value" id="v-umid">—<span class="metric-unit">%</span></div>
+      <div class="metric-delta" id="d-umid">aguardando dados...</div>
+    </div>
+    <div class="metric-card lux">
+      <div class="metric-label">
+        Luminosidade
+        <span class="alert-badge" id="alert-lux" style="display:none">ALERTA</span>
+      </div>
+      <div class="metric-value" id="v-lux">—<span class="metric-unit">%</span></div>
+      <div class="metric-delta" id="d-lux">aguardando dados...</div>
+    </div>
+    <div class="metric-card tensao">
+      <div class="metric-label">
+        Tensão
+        <span class="alert-badge" id="alert-tensao" style="display:none">ALERTA</span>
+      </div>
+      <div class="metric-value" id="v-tensao">—<span class="metric-unit">V</span></div>
+      <div class="metric-delta" id="d-tensao">aguardando dados...</div>
+    </div>
+    <div class="metric-card corr">
+      <div class="metric-label">
+        Corrente
+        <span class="alert-badge" id="alert-corr" style="display:none">ALERTA</span>
+      </div>
+      <div class="metric-value" id="v-corr">—<span class="metric-unit">A</span></div>
+      <div class="metric-delta" id="d-corr">aguardando dados...</div>
+    </div>
+  </div>
+
+  <!-- Gráficos de série temporal -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Temperatura &amp; Umidade</span>
+        <span class="chart-badge" id="badge-th">0 leituras</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-th"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Luminosidade</span>
+        <span class="chart-badge" id="badge-lux">0 leituras</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-lux"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Tensão</span>
+        <span class="chart-badge" id="badge-v">0 leituras</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-v"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-header">
+        <span class="chart-title">Corrente</span>
+        <span class="chart-badge" id="badge-c">0 leituras</span>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-c"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Análise estatística -->
+  <div class="analysis-grid">
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#FAECE7; color:#D85A30;">T</div>
+        Temperatura — Análise
+      </div>
+      <div id="stats-temp"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#E6F1FB; color:#185FA5;">U</div>
+        Umidade — Análise
+      </div>
+      <div id="stats-umid"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#FAEEDA; color:#BA7517;">L</div>
+        Luminosidade — Análise
+      </div>
+      <div id="stats-lux"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#EEEDFE; color:#534AB7;">V</div>
+        Tensão — Análise
+      </div>
+      <div id="stats-tensao"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#E1F5EE; color:#1D9E75;">I</div>
+        Corrente — Análise
+      </div>
+      <div id="stats-corr"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+    <div class="analysis-card">
+      <div class="analysis-title">
+        <div class="analysis-icon" style="background:#F1EFE8; color:#5F5E5A;">S</div>
+        Sessão
+      </div>
+      <div id="stats-sessao"><div class="no-data">Aguardando dados...</div></div>
+    </div>
+  </div>
+
+  <!-- Configuração de alertas -->
+  <div class="config-card">
+    <div class="config-title">Thresholds de alerta</div>
+    <div class="config-grid">
+      <div class="config-field">
+        <label>Temp máxima (°C)</label>
+        <input type="number" id="thr-temp-max" value="35" step="0.5"/>
+      </div>
+      <div class="config-field">
+        <label>Umidade mínima (%)</label>
+        <input type="number" id="thr-umid-min" value="20" step="1"/>
+      </div>
+      <div class="config-field">
+        <label>Umidade máxima (%)</label>
+        <input type="number" id="thr-umid-max" value="90" step="1"/>
+      </div>
+      <div class="config-field">
+        <label>Tensão máxima (V)</label>
+        <input type="number" id="thr-tensao-max" value="12" step="0.1"/>
+      </div>
+      <div class="config-field">
+        <label>Corrente máxima (A)</label>
+        <input type="number" id="thr-corr-max" value="3" step="0.1"/>
+      </div>
+      <div class="config-field">
+        <label>Luminosidade mínima (%)</label>
+        <input type="number" id="thr-lux-min" value="5" step="1"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log de eventos -->
+  <div class="log-card">
+    <div class="log-header">
+      <span class="log-title">Log de eventos</span>
+      <button onclick="limparLog()" style="font-size:12px;padding:4px 10px">Limpar</button>
+    </div>
+    <div class="log-body" id="log-body"></div>
+  </div>
+
+</main>
+<footer>TCC — Sistema de Monitoramento IoT com ESP32 + Wokwi + MQTT</footer>
+
+<script>
+// ── Configuração MQTT ─────────────────────────────────────────────────────
+const BROKER    = "wss://broker.hivemq.com:8884/mqtt";
+const TOPIC_SUB = "tcc/modulo1/sensores";
+const TOPIC_CMD = "tcc/modulo1/cmd";
+const CLIENT_ID = "dashboard-tcc-" + Math.random().toString(16).slice(2,8);
+
+// ── Estado da aplicação ───────────────────────────────────────────────────
+const MAX_PONTOS = 60; // últimos 60 pontos no gráfico
+const historico  = JSON.parse(localStorage.getItem("tcc_historico") || "[]");
+let   client     = null;
+let   espOnline  = false;
+let   espTimer   = null;
+
+// ── Inicialização dos gráficos ────────────────────────────────────────────
+const chartOpts = (cor1, cor2) => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: { duration: 300 },
+  plugins: { legend: { display: !!cor2, labels: { font: { size: 11 }, boxWidth: 12, padding: 10 } } },
+  scales: {
+    x: { ticks: { font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false } },
+    y: { ticks: { font: { size: 11 } }, grid: { color: "rgba(128,128,128,0.1)" } }
+  }
+});
+
+function makeDataset(label, cor, dados) {
+  return {
+    label, data: dados,
+    borderColor: cor, backgroundColor: cor + "22",
+    borderWidth: 1.5, pointRadius: 2, tension: 0.3, fill: true
+  };
+}
+
+const labels = [];
+const dTemp  = [], dUmid = [], dLux = [], dTensao = [], dCorr = [];
+
+const chartTH = new Chart(document.getElementById("chart-th"), {
+  type: "line",
+  data: { labels, datasets: [makeDataset("Temp (°C)", "#D85A30", dTemp), makeDataset("Umidade (%)", "#185FA5", dUmid)] },
+  options: chartOpts(true)
+});
+const chartLux = new Chart(document.getElementById("chart-lux"), {
+  type: "line",
+  data: { labels, datasets: [makeDataset("Lux %", "#BA7517", dLux)] },
+  options: chartOpts()
+});
+const chartV = new Chart(document.getElementById("chart-v"), {
+  type: "line",
+  data: { labels, datasets: [makeDataset("Tensão (V)", "#534AB7", dTensao)] },
+  options: chartOpts()
+});
+const chartC = new Chart(document.getElementById("chart-c"), {
+  type: "line",
+  data: { labels, datasets: [makeDataset("Corrente (A)", "#1D9E75", dCorr)] },
+  options: chartOpts()
+});
+
+// ── Conexão MQTT ──────────────────────────────────────────────────────────
+function conectar() {
+  client = mqtt.connect(BROKER, { clientId: CLIENT_ID, clean: true, reconnectPeriod: 3000 });
+
+  client.on("connect", () => {
+    setConn(true);
+    addLog("Conectado ao broker HiveMQ", "ok");
+    client.subscribe(TOPIC_SUB, { qos: 0 });
+    addLog("Assinando tópico: " + TOPIC_SUB, "ok");
+  });
+
+  client.on("disconnect", () => { setConn(false); addLog("Desconectado do broker", "alert"); });
+  client.on("error", (e)   => { addLog("Erro MQTT: " + e.message, "alert"); });
+  client.on("reconnect",   () => { addLog("Reconectando...", "ok"); });
+
+  client.on("message", (topic, payload) => {
+    try {
+      const data = JSON.parse(payload.toString());
+      processarDado(data);
+    } catch(e) {
+      addLog("JSON inválido recebido", "alert");
+    }
+  });
+}
+
+function setConn(ok) {
+  document.getElementById("conn-indicator").className = "status-indicator " + (ok ? "online" : "offline");
+  document.getElementById("conn-label").textContent   = ok ? "Conectado" : "Desconectado";
+}
+
+function setEsp(ok) {
+  espOnline = ok;
+  document.getElementById("esp-indicator").className = "status-indicator " + (ok ? "online" : "offline");
+  document.getElementById("esp-label").textContent   = "ESP32 " + (ok ? "online" : "offline");
+}
+
+// ── Processamento de dados ────────────────────────────────────────────────
+function processarDado(d) {
+  // Marca ESP online e reseta timer de timeout
+  setEsp(true);
+  clearTimeout(espTimer);
+  espTimer = setTimeout(() => { setEsp(false); addLog("ESP32 sem dados há 10s — offline?", "alert"); }, 10000);
+
+  // Timestamp legível
+  const agora = new Date();
+  const ts = agora.getHours().toString().padStart(2,"0") + ":" +
+             agora.getMinutes().toString().padStart(2,"0") + ":" +
+             agora.getSeconds().toString().padStart(2,"0");
+  document.getElementById("last-update").textContent = "Última: " + ts;
+
+  // Adiciona ao histórico
+  const entrada = { ts, temp: d.temp, umid: d.umid, lux: d.lux_raw, tensao: d.tensao, corrente: d.corrente };
+  historico.push(entrada);
+  if (historico.length > 5000) historico.shift();
+  localStorage.setItem("tcc_historico", JSON.stringify(historico.slice(-5000)));
+
+  // Atualiza arrays dos gráficos (janela deslizante)
+  if (labels.length >= MAX_PONTOS) {
+    labels.shift(); dTemp.shift(); dUmid.shift();
+    dLux.shift(); dTensao.shift(); dCorr.shift();
+  }
+  labels.push(ts);
+  dTemp.push(d.temp); dUmid.push(d.umid); dLux.push(d.lux_raw);
+  dTensao.push(d.tensao); dCorr.push(d.corrente);
+
+  chartTH.update(); chartLux.update(); chartV.update(); chartC.update();
+
+  // Atualiza badges
+  const n = labels.length;
+  ["th","lux","v","c"].forEach(k => document.getElementById("badge-"+k).textContent = n + " leituras");
+
+  // Atualiza cartões de métricas
+  atualizarMetrica("temp",   d.temp,      "°C", "d-temp");
+  atualizarMetrica("umid",   d.umid,      "%",  "d-umid");
+  atualizarMetrica("lux",    d.lux_raw,   "%",  "d-lux");
+  atualizarMetrica("tensao", d.tensao,    "V",  "d-tensao");
+  atualizarMetrica("corr",   d.corrente,  "A",  "d-corr");
+
+  // Verifica alertas
+  verificarAlertas(d);
+
+  // Atualiza estatísticas
+  if (historico.length >= 2) atualizarEstatisticas();
+}
+
+function atualizarMetrica(id, val, unit, deltaId) {
+  const el = document.getElementById("v-" + id);
+  el.innerHTML = val.toFixed(id === "tensao" || id === "corr" ? 2 : 1) + '<span class="metric-unit">' + unit + "</span>";
+  // Delta em relação ao valor anterior
+  const arr = id === "temp" ? dTemp : id === "umid" ? dUmid : id === "lux" ? dLux : id === "tensao" ? dTensao : dCorr;
+  if (arr.length >= 2) {
+    const delta = val - arr[arr.length - 2];
+    const sinal = delta >= 0 ? "▲" : "▼";
+    document.getElementById(deltaId).textContent = sinal + " " + Math.abs(delta).toFixed(2) + " em relação à anterior";
+  }
+}
+
+// ── Análise estatística ───────────────────────────────────────────────────
+function calcStats(arr) {
+  if (!arr || arr.length === 0) return null;
+  const n    = arr.length;
+  const min  = Math.min(...arr);
+  const max  = Math.max(...arr);
+  const mean = arr.reduce((a, b) => a + b, 0) / n;
+  const variance = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+  const std  = Math.sqrt(variance);
+  // Mediana
+  const sorted = [...arr].sort((a, b) => a - b);
+  const med  = n % 2 === 0 ? (sorted[n/2-1] + sorted[n/2]) / 2 : sorted[Math.floor(n/2)];
+  // Tendência linear (regressão simples)
+  const xMean = (n - 1) / 2;
+  const num   = arr.reduce((acc, y, i) => acc + (i - xMean) * (y - mean), 0);
+  const den   = arr.reduce((acc, _, i) => acc + Math.pow(i - xMean, 2), 0);
+  const slope = den !== 0 ? num / den : 0;
+  return { n, min, max, mean, std, med, slope };
+}
+
+function renderStats(containerId, stats, unit, casas) {
+  if (!stats) return;
+  const c = casas || 2;
+  const tendencia = Math.abs(stats.slope) < 0.001 ? "estável" :
+                    stats.slope > 0 ? "↑ crescente" : "↓ decrescente";
+  document.getElementById(containerId).innerHTML = `
+    <div class="stat-row"><span class="stat-label">Mínimo</span><span class="stat-value">${stats.min.toFixed(c)} ${unit}</span></div>
+    <div class="stat-row"><span class="stat-label">Máximo</span><span class="stat-value">${stats.max.toFixed(c)} ${unit}</span></div>
+    <div class="stat-row"><span class="stat-label">Média</span><span class="stat-value">${stats.mean.toFixed(c)} ${unit}</span></div>
+    <div class="stat-row"><span class="stat-label">Mediana</span><span class="stat-value">${stats.med.toFixed(c)} ${unit}</span></div>
+    <div class="stat-row"><span class="stat-label">Desvio padrão</span><span class="stat-value">${stats.std.toFixed(c)} ${unit}</span></div>
+    <div class="stat-row"><span class="stat-label">Tendência</span><span class="stat-value">${tendencia}</span></div>
+    <div class="stat-row"><span class="stat-label">Amostras</span><span class="stat-value">${stats.n}</span></div>
+  `;
+}
+
+function atualizarEstatisticas() {
+  const temps    = historico.map(h => h.temp);
+  const umids    = historico.map(h => h.umid);
+  const luxes    = historico.map(h => h.lux);
+  const tensoes  = historico.map(h => h.tensao);
+  const correntes= historico.map(h => h.corrente);
+  const duracao  = historico.length * 2; // ~2s por leitura
+
+  renderStats("stats-temp",   calcStats(temps),     "°C", 1);
+  renderStats("stats-umid",   calcStats(umids),     "%",  1);
+  renderStats("stats-lux",    calcStats(luxes),     "%",  1);
+  renderStats("stats-tensao", calcStats(tensoes),   "V",  2);
+  renderStats("stats-corr",   calcStats(correntes), "A",  2);
+
+  const m = Math.floor(duracao / 60), s = duracao % 60;
+  document.getElementById("stats-sessao").innerHTML = `
+    <div class="stat-row"><span class="stat-label">Total de leituras</span><span class="stat-value">${historico.length}</span></div>
+    <div class="stat-row"><span class="stat-label">Duração estimada</span><span class="stat-value">${m}m ${s}s</span></div>
+    <div class="stat-row"><span class="stat-label">Intervalo</span><span class="stat-value">~2 s/leitura</span></div>
+    <div class="stat-row"><span class="stat-label">Armazenamento</span><span class="stat-value">localStorage</span></div>
+  `;
+}
+
+// ── Verificação de alertas ────────────────────────────────────────────────
+function verificarAlertas(d) {
+  const thrTempMax  = parseFloat(document.getElementById("thr-temp-max").value);
+  const thrUmidMin  = parseFloat(document.getElementById("thr-umid-min").value);
+  const thrUmidMax  = parseFloat(document.getElementById("thr-umid-max").value);
+  const thrTensao   = parseFloat(document.getElementById("thr-tensao-max").value);
+  const thrCorr     = parseFloat(document.getElementById("thr-corr-max").value);
+  const thrLuxMin   = parseFloat(document.getElementById("thr-lux-min").value);
+
+  const checks = [
+    { id: "temp",   trigger: d.temp > thrTempMax,              msg: `Temperatura alta: ${d.temp}°C (limite: ${thrTempMax}°C)` },
+    { id: "umid",   trigger: d.umid < thrUmidMin || d.umid > thrUmidMax, msg: `Umidade fora do intervalo: ${d.umid}%` },
+    { id: "lux",    trigger: d.lux_raw < thrLuxMin,            msg: `Luminosidade baixa: ${d.lux_raw}%` },
+    { id: "tensao", trigger: d.tensao > thrTensao,             msg: `Tensão alta: ${d.tensao}V (limite: ${thrTensao}V)` },
+    { id: "corr",   trigger: d.corrente > thrCorr,             msg: `Corrente alta: ${d.corrente}A (limite: ${thrCorr}A)` },
+  ];
+
+  checks.forEach(({ id, trigger, msg }) => {
+    const badge = document.getElementById("alert-" + id);
+    badge.style.display = trigger ? "inline" : "none";
+    if (trigger) addLog(msg, "alert");
+  });
+}
+
+// ── Log de eventos ────────────────────────────────────────────────────────
+function addLog(msg, tipo) {
+  const body = document.getElementById("log-body");
+  const agora = new Date();
+  const ts = agora.toTimeString().slice(0, 8);
+  const el = document.createElement("div");
+  el.className = "log-entry " + (tipo || "ok");
+  el.innerHTML = `<span class="log-time">${ts}</span><span class="log-msg">${msg}</span>`;
+  body.prepend(el);
+  // Limita log visual a 100 linhas
+  while (body.children.length > 100) body.removeChild(body.lastChild);
+}
+
+function limparLog() {
+  document.getElementById("log-body").innerHTML = "";
+}
+
+// ── Exportação CSV ────────────────────────────────────────────────────────
+function exportCSV() {
+  if (historico.length === 0) { alert("Nenhum dado para exportar."); return; }
+  const header = "timestamp,temperatura_C,umidade_%,luminosidade_%,tensao_V,corrente_A\n";
+  const linhas = historico.map(h =>
+    `${h.ts},${h.temp},${h.umid},${h.lux},${h.tensao},${h.corrente}`
+  ).join("\n");
+  const blob = new Blob([header + linhas], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = "tcc_dados_" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+  addLog("CSV exportado — " + historico.length + " registros", "ok");
+}
+
+// ── Utilitários ───────────────────────────────────────────────────────────
+function limparHistorico() {
+  if (!confirm("Apagar todo o histórico local?")) return;
+  historico.length = 0;
+  localStorage.removeItem("tcc_historico");
+  labels.length = 0; dTemp.length = 0; dUmid.length = 0;
+  dLux.length = 0; dTensao.length = 0; dCorr.length = 0;
+  chartTH.update(); chartLux.update(); chartV.update(); chartC.update();
+  addLog("Histórico limpo", "ok");
+}
+
+function enviarComando(cmd) {
+  if (!client || !client.connected) { addLog("Sem conexão MQTT para enviar comando", "alert"); return; }
+  client.publish(TOPIC_CMD, cmd);
+  addLog("Comando enviado: " + cmd, "ok");
+}
+
+function desconectar() {
+  if (client) { client.end(); setConn(false); setEsp(false); addLog("Desconectado manualmente", "ok"); }
+}
+
+// ── Inicializa ────────────────────────────────────────────────────────────
+conectar();
+addLog("Dashboard iniciado — aguardando conexão MQTT...", "ok");
+
+// Restaura histórico salvo nos gráficos (últimos MAX_PONTOS)
+const recentes = historico.slice(-MAX_PONTOS);
+recentes.forEach(h => {
+  labels.push(h.ts); dTemp.push(h.temp); dUmid.push(h.umid);
+  dLux.push(h.lux); dTensao.push(h.tensao); dCorr.push(h.corrente);
+});
+if (recentes.length) {
+  chartTH.update(); chartLux.update(); chartV.update(); chartC.update();
+  atualizarEstatisticas();
+  addLog("Histórico restaurado — " + historico.length + " registros", "ok");
+}
+</script>
+</body>
+</html>
